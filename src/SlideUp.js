@@ -61,14 +61,7 @@ const styles = StyleSheet.create({
   },
 });
 
-function withSpring(
-  translate,
-  gestureState,
-  translation,
-  setIsOpened,
-  setIsBackdropVisible,
-  setIsPanelVisible,
-) {
+function withSpring(translate, gestureState, translation) {
   const clock = new Clock();
   const config = {
     toValue: new Value(0),
@@ -87,121 +80,65 @@ function withSpring(
   };
 
   return block([
-    cond(
-      eq(gestureState, State.ACTIVE),
-      [set(translate, diffClamp(sub(translation, 250), -250, 0))],
-      [
-        cond(eq(gestureState, State.END), [
-          cond(
-            and(not(clockRunning(clock)), lessThan(translation, 250 / 2)),
-            [
-              debug('translation', translation),
-              // set(state.position, 0),
-              set(config.toValue, -250),
-              startClock(clock),
-              spring(clock, state, config),
-              set(translate, state.position),
-              cond(state.finished, [
-                stopClock(clock),
-                set(gestureState, State.UNDETERMINED),
-              ]),
-            ],
-            [
-              // set(config.toValue, 0),
-              // spring(clock, state, config),
-              // set(translate, state.position),
-              // cond(and(eq(state.position, 0), state.finished), [
-              //   call([], () => {
-              //     setIsOpened(false);
-              //     setIsBackdropVisible(false);
-              //     setIsPanelVisible(false);
-              //   }),
-              //   stopClock(clock),
-              // ]),
-            ],
-          ),
-        ]),
-      ],
-    ),
+    // cond(eq(gestureState, State.BEGAN), [set(translate, -250)]),
+    cond(eq(gestureState, State.ACTIVE), [
+      set(translate, diffClamp(sub(translation, 250), -250, 0)),
+    ]),
   ]);
 }
 
 const SlideUp = React.forwardRef((_, ref) => {
-  const [isOpened, setIsOpened] = React.useState(false);
-  function open() {
-    setIsOpened(true);
-  }
-
-  React.useEffect(() => {
-    ref.current = open;
-  }, [ref]);
-  const [isBackdropVisible, setIsBackdropVisible] = React.useState(false);
-  const [isPanelVisible, setIsPanelVisible] = React.useState(false);
+  const [isBackdropShown, setIsBackdropShown] = React.useState(false);
+  const [isPanelShown, setIsPanelShown] = React.useState(false);
   const [isCloseButtonPressed, setIsCloseButtonPressed] = React.useState(false);
-  const {gestureHandler, state, translation} = usePanGestureHandler();
   const translateY = useValue(0);
+  const {gestureHandler, state, translation} = usePanGestureHandler();
+
+  function open() {
+    setIsBackdropShown(true);
+  }
 
   function handleCloseButtonPressed() {
     setIsCloseButtonPressed(true);
   }
 
-  React.useEffect(() => {
-    if (isOpened) setIsBackdropVisible(true);
-  }, [isOpened]);
+  React.useEffect(() => (ref.current = open), [ref]);
+  console.log('isCloseButtonPressed', isCloseButtonPressed);
 
+  /* show panel */
   useCode(() => {
-    if (isOpened && !isPanelVisible) {
+    if (isBackdropShown && !isPanelShown) {
       return block([
-        set(
-          translateY,
-          timing({from: 0, to: -250, duratin: 250, easing: Easing.linear}),
-        ),
-        cond(
-          eq(translateY, -250),
-          call([], () => setIsPanelVisible(true)),
-        ),
+        set(translateY, timing({from: 0, to: -250})),
+        cond(eq(translateY, -250), [call([], () => setIsPanelShown(true))]),
       ]);
     }
-  }, [isOpened, isPanelVisible]);
+  }, [isBackdropShown, isPanelShown]);
 
+  /* close slide up if button has  been pressed */
   useCode(() => {
-    if (isCloseButtonPressed && isPanelVisible) {
+    if (isBackdropShown && isPanelShown && isCloseButtonPressed) {
       return block([
-        set(
-          translateY,
-          timing({from: -250, to: 0, duratin: 250, easing: Easing.linear}),
-        ),
+        set(translateY, timing({from: -250, to: 0})),
         cond(eq(translateY, 0), [
           call([], () => {
-            setIsBackdropVisible(false);
             setIsCloseButtonPressed(false);
-            setIsOpened(false);
-            setIsPanelVisible(false);
+            setIsPanelShown(false);
+            setIsBackdropShown(false);
           }),
         ]),
       ]);
     }
-  }, [isCloseButtonPressed, isPanelVisible]);
+  }, [isBackdropShown, isPanelShown, isCloseButtonPressed]);
 
+  /* handle pandel via pan gesture */
   useCode(() => {
-    if (isPanelVisible && !isCloseButtonPressed) {
-      return withSpring(
-        translateY,
-        state,
-        translation.y,
-        setIsOpened,
-        setIsBackdropVisible,
-        setIsPanelVisible,
-      );
+    if (isBackdropShown && isPanelShown && !isCloseButtonPressed) {
+      return withSpring(translateY, state, translation.y);
     }
-  }, [state, isPanelVisible, isCloseButtonPressed, translateY, translation.y]);
+  }, [translateY, state, translation.y]);
 
-  console.log('isOpened', isOpened);
-  console.log('isBackdropVisible', isBackdropVisible);
-  console.log('isPanelVisible', isPanelVisible);
-  console.log('isCloseButtonPressed', isCloseButtonPressed);
-
-  if (!isBackdropVisible) return null;
+  if (!isBackdropShown) return null;
   return (
     <View style={styles.container}>
       <PanGestureHandler {...gestureHandler}>
